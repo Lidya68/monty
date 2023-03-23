@@ -1,53 +1,84 @@
 #include "monty.h"
 
-char *flag = "stack";
+variable_t global;
 
 /**
- * main - main function to run monty
- * @ac: number of arguments
- * @av: list of arguments as strings
- *
- * Return: 0
+ * main - function to interpret and execute Monty ByteCode file
+ * @argc: count of number of input arguments from command line
+ * @argv: input array of arguments, including program name
+ * Return: 0 if successful
  */
-int main(int ac, char **av)
-{
-	stack_t *h;
-	int exec_err, fp;
-	unsigned int line_number;
-	ssize_t status;
-	char *line;
-	size_t length;
 
-	if (ac != 2)
+int main(int argc, char *argv[])
+{
+	char *str = NULL;
+	size_t buffsize;
+	ssize_t check;
+	unsigned int line_number = 1;
+	stack_t *stack = NULL;
+
+	global.fd = opening_func(argc, argv);
+	while (1)
 	{
-		printf("USAGE: monty file\n"), exit(EXIT_FAILURE);
+		check = getline(&str, &buffsize, global.fd);
+		if (check == -1)
+		{
+			free(str);
+			break;
+		}
+		global.opcode = getopcode(&str);
+		if (global.opcode == NULL)
+			free_for_exit_malloc(stack);
+		if (strncmp(global.opcode, "push ", 5) == 0)
+		{
+			stack = addnode(global.opcode, &stack, line_number);
+			if (stack == NULL)
+				free_for_exit_error(stack);
+		}
+		else if (strcmp(global.opcode, "push") == 0)
+			free_for_exit_push(line_number, stack);
+		else
+		{
+			stack = findinstruction(global.opcode,
+						&stack, line_number);
+		}
+		free(global.opcode);
+		line_number++;
 	}
-	h = NULL;
-	fp = open(av[1], O_RDONLY);
-	if (fp == -1)
+	fclose(global.fd);
+	free_stack(stack);
+	return (0);
+}
+
+/**
+ * open_function - checks if given correct parameters to open file
+ * @argc: count of input arguments from command line
+ * @argv: input 2D array of arguments, including program name
+ * Return: pointer to open file
+ */
+
+FILE *opening_func(int argc, char *argv[])
+{
+	int status;
+
+	global.opcode = NULL;
+	global.fd = NULL;
+	if (argc != 2)
 	{
-		printf("Error: Can't open file %s\n", av[1]);
+		fprintf(stderr, "USAGE: monty file\n");
 		exit(EXIT_FAILURE);
 	}
-	line_number = 0;
-	do {
-		++line_number;
-		line = NULL;
-		length = 0;
-		status = _getline(&line, &length, fp);
-		if (status > 2)
-		{
-			exec_err = execute(&h, line, line_number);
-			if (exec_err == -1)
-				status = -2;
-		}
-		else
-			free(line);
-	} while (status >= 0);
-
-	close(fp);
-	free_stack(h), h = NULL;
+	status = open(argv[1], O_RDONLY);
 	if (status == -1)
-		return (0);
-	exit(EXIT_FAILURE);
+	{
+		fprintf(stderr, "Error: Can't open file %s\n", argv[1]);
+		exit(EXIT_FAILURE);
+	}
+	global.fd = fdopen(status, "r");
+	if (global.fd == NULL)
+	{
+		fprintf(stderr, "Error: malloc failed\n");
+		exit(EXIT_FAILURE);
+	}
+	return (global.fd);
 }
